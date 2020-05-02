@@ -17,3 +17,4 @@ types-freezegun
 types-requests
 types-urllib3
 typing_extensions
+js2py
