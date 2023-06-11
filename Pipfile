@@ -1,0 +1,21 @@
+[[source]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+verify_ssl = true
+name = "pip_conf_index_global"
+
+[packages]
+requests = "<3.0,>=2.26.0"
+websocket-client = "<2.0,>=1.2.1"
+lxml = "<6,>=4.6.4"
+pycryptodome = ">=3.4.3,<4"
+pysocks = "!=1.5.7,>=1.5.6"
+versioningit = "*"
+pycountry = "*"
+streamlink = {path = "."}
+js2py = "*"
+
+[dev-packages]
+ruff = "*"
+
+[requires]
+python_version = "3.11"
