@@ -267,7 +267,7 @@ class Douyutv(Plugin):
                 name = "{cdn}_{rate}".format(
                     cdn=ROUTES.get(cdn, "main"), rate=RATES.get(rate, "BD")
                 )
-                self.logger.debug(
+                self.logger.info(
                     "rtmp: name: {cdn}({rate}), address: {addr}".format(
                         cdn=cdnName, rate=rateName, addr=rtmp_address
                     )
