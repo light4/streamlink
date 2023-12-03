@@ -1,5 +1,6 @@
 import re
 import time
+import warnings
 from typing import Any, Dict, Pattern, Tuple
 
 import requests.adapters
@@ -7,10 +8,17 @@ import urllib3
 from requests import PreparedRequest, Request, Session
 from requests.adapters import HTTPAdapter
 
-from streamlink.exceptions import PluginError
+from streamlink.exceptions import PluginError, StreamlinkDeprecationWarning
 from streamlink.packages.requests_file import FileAdapter
 from streamlink.plugin.api import useragents
 from streamlink.utils.parse import parse_json, parse_xml
+
+
+try:
+    from urllib3.util import create_urllib3_context  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover
+    # urllib3 <2.0.0 compat import
+    from urllib3.util.ssl_ import create_urllib3_context
 
 
 # urllib3>=2.0.0: enforce_content_length now defaults to True (keep the override for backwards compatibility)
@@ -83,23 +91,27 @@ class HTTPSession(Session):
         self.mount("file://", FileAdapter())
 
     @classmethod
-    def determine_json_encoding(cls, sample):
+    def determine_json_encoding(cls, sample: bytes):
         """
         Determine which Unicode encoding the JSON text sample is encoded with
 
-        RFC4627 (http://www.ietf.org/rfc/rfc4627.txt) suggests that the encoding of JSON text can be determined
+        RFC4627 suggests that the encoding of JSON text can be determined
         by checking the pattern of NULL bytes in first 4 octets of the text.
+        https://datatracker.ietf.org/doc/html/rfc4627#section-3
+
         :param sample: a sample of at least 4 bytes of the JSON text
         :return: the most likely encoding of the JSON text
         """
-        nulls_at = [i for i, j in enumerate(bytearray(sample[:4])) if j == 0]
-        if nulls_at == [0, 1, 2]:
+        warnings.warn("Deprecated HTTPSession.determine_json_encoding() call", StreamlinkDeprecationWarning, stacklevel=1)
+        data = int.from_bytes(sample[:4], "big")
+
+        if data & 0xffffff00 == 0:
             return "UTF-32BE"
-        elif nulls_at == [0, 2]:
+        elif data & 0xff00ff00 == 0:
             return "UTF-16BE"
-        elif nulls_at == [1, 2, 3]:
+        elif data & 0x00ffffff == 0:
             return "UTF-32LE"
-        elif nulls_at == [1, 3]:
+        elif data & 0x00ff00ff == 0:
             return "UTF-16LE"
         else:
             return "UTF-8"
@@ -107,10 +119,12 @@ class HTTPSession(Session):
     @classmethod
     def json(cls, res, *args, **kwargs):
         """Parses JSON from a response."""
-        # if an encoding is already set then use the provided encoding
         if res.encoding is None:
-            res.encoding = cls.determine_json_encoding(res.content[:4])
-        return parse_json(res.text, *args, **kwargs)
+            # encoding is unknown: let ``json.loads`` figure it out from the bytes data via ``json.detect_encoding``
+            return parse_json(res.content, *args, **kwargs)
+        else:
+            # encoding is explicitly set: get the decoded string value and let ``json.loads`` parse it
+            return parse_json(res.text, *args, **kwargs)
 
     @classmethod
     def xml(cls, res, *args, **kwargs):
@@ -188,7 +202,7 @@ class HTTPSession(Session):
 
 class TLSNoDHAdapter(HTTPAdapter):
     def init_poolmanager(self, *args, **kwargs):
-        ctx = urllib3.util.create_urllib3_context()
+        ctx = create_urllib3_context()
         ctx.load_default_certs()
         ciphers = ":".join(cipher.get("name") for cipher in ctx.get_ciphers())
         ciphers += ":!DH"
@@ -199,7 +213,7 @@ class TLSNoDHAdapter(HTTPAdapter):
 
 class TLSSecLevel1Adapter(HTTPAdapter):
     def init_poolmanager(self, *args, **kwargs):
-        ctx = urllib3.util.create_urllib3_context()
+        ctx = create_urllib3_context()
         ctx.load_default_certs()
         ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
         kwargs["ssl_context"] = ctx
